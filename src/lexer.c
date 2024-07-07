@@ -4,20 +4,6 @@
 #include "error.h"
 #include "lexer.h"
 
-unsigned long long int FNV_hash(const char *input, unsigned int len)
-{
-    const unsigned long long int FNV_offset_basis = 0xCBF29CE484222325;
-    const unsigned long long int FNV_prime = 0x00000100000001B3;
-
-    unsigned long long int hash = FNV_offset_basis;
-    for(unsigned int i = 0; i < len; i++)
-    {
-        hash = hash ^ input[i];
-        hash *= FNV_prime;
-    }
-    return hash;
-}
-
 inline void delete_token(Token *tok)
 {
     if(tok->val != NULL)
@@ -25,7 +11,17 @@ inline void delete_token(Token *tok)
     free(tok);
 }
 
+const char default_whitespace[] = { ' ', '\t', '\n', '\r' };
+
 //checks if a character is whitespace
+inline bool check_whitespace_different(const char input, char whitespace[], int whitespacecount)
+{
+    for(unsigned int i = 0; i < whitespacecount; i++)
+        if(input == whitespace[i])
+            return true;
+    return false;
+}
+
 inline bool check_whitespace(const char input)
 {
     const char whitespace[] = { ' ', '\t', '\n', '\r' };
@@ -86,7 +82,7 @@ int check_comment(const char *input, unsigned int inputlen)
     }
     return 0;
 }
-
+//TODO: theres a simplification with how comments and whitespace are handled here
 Token next_token(LexerContext *context)
 {
     int state = 0;

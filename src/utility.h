@@ -2,6 +2,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef struct Buffer
+{
+    void *data;
+    size_t size;
+} Buffer;
+
 typedef struct PoolSection
 {
     void *memory;
@@ -24,6 +30,7 @@ void dynamicarray_initialize(DynamicArray *dynarr, unsigned int element_size, un
 void dynamicarray_resize(DynamicArray *dynarr, unsigned int newsize);
 void dynamicarray_reserve(DynamicArray *dynarr, unsigned int newsize);
 void *dynamicarray_append(DynamicArray *dynarr, void *el);
+void *dynamicarray_get_element(DynamicArray *dynarr, unsigned int element);
 void *dynamicarray_new_element(DynamicArray *dynarr);
 void dynamicarray_free(DynamicArray *dynarr);
 
@@ -37,6 +44,7 @@ typedef struct Stack
 void stack_initialize(Stack *stack, unsigned int element_size, unsigned int max_depth);
 void stack_push(Stack *stack, void *data);
 void stack_pop(Stack *stack, void *data);
+void *stack_peek(Stack *stack);
 void stack_free(Stack *stack);
 
 inline uint64_t FNV_hash(const char *input, uint64_t len)
@@ -55,7 +63,6 @@ inline uint64_t FNV_hash(const char *input, uint64_t len)
 }
 
 typedef uint64_t (*HashFunc)(const char *, uint64_t);
-
 //simple linear probing hashmap
 typedef enum HashmapReturn
 {
@@ -63,27 +70,27 @@ typedef enum HashmapReturn
     HASHMAP_DUPLICATE,
     HASHMAP_NOT_FOUND
 } HashmapReturn;
+//TODO: restructure this to have better cache locality maybe force key member to be static length
 typedef struct HashmapPair
 {
-    uint64_t key;
-    uint64_t val;
+    void *key;
+    uint32_t keylen;
     bool occupied;
 } HashmapPair;
 typedef struct HashMap
 {
-    const float load_factor = 0.75;
-    const int initial_size = 8;
-
-    HashmapPair *pairs;
+    float load_factor;
+    unsigned char *data;
     size_t pair_count;
     size_t pair_max;
-    DynamicArray data;
+    uint32_t elsize;
     HashFunc hash;
 } HashMap;
 
-void hashmap_initialize(HashMap *hmap);
+//0.75 is a good number for load_factor
+void hashmap_initialize(HashMap *hmap, int initial_size, uint32_t elsize, float load_factor);
 void hashmap_free(HashMap *hmap);
-HashmapReturn hashmap_insert(HashMap *hmap, char *key, uint64_t keylen, void *val);
-HashmapReturn hashmap_delete(HashMap *hmap, char *key, uint64_t keylen);
-HashmapReturn hashmap_lookup(HashMap *hmap, char *key, uint64_t keylen, void **val);
-HashmapReturn hashmap_lookup2(HashMap *hmap, uint64_t hash, void **val);
+HashmapReturn hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val);
+HashmapReturn hashmap_delete(HashMap *hmap, void *key, uint32_t keylen);
+//note you can pass null to val to just see if the object does exist
+HashmapReturn hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val);

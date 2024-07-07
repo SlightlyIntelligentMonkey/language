@@ -17,15 +17,14 @@ typedef enum e_ParseType
 typedef struct ParseRule
 {
     char *identifier;
-    unsigned long long int hash;
+    uint64_t hash;
     ParseType type;
 } ParseRule;
 
 typedef struct ParseContext
 {
-    LexerContext lexcontext;
-    Ruleset *rulesets;
-    size_t ruleset_count;
+    LexerContext *lexcontext;
+    Ruleset *ruleset;
     Stack listnodes;
     Stack lastnode;
 } ParseContext;
@@ -60,6 +59,7 @@ typedef struct AST_Node
 {
     enum AST_Node_Type type;
     Token tok;      //token used to construct the node
+    //uint64_t hash;
     union
     {
         struct InfixOperator_Node inop;
@@ -70,6 +70,8 @@ typedef struct AST_Node
 
 //returns array of root parse tree create from the parsecontext
 int parse(ParseContext *context, DynamicArray dynarr);
+
+AST_Node *parse_tree(ParseContext *context, DynamicArray dynarr);
 
 //flattens the ast tree starting from node given to an array
 int flatten(AST_Node *node, DynamicArray dynarr, int loc);

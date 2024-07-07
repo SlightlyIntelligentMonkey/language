@@ -23,8 +23,14 @@ typedef struct Token
     unsigned int line, col, colend;
 } Token;
 
+typedef struct LexerRules
+{
+    char *whitespace;
+    char **special;
+} LexerRules;
 typedef struct LexerContext
 {
+    LexerRules *lrules;
     char *input;
     unsigned int inputlen;
     unsigned int pos;

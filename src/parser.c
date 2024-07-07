@@ -77,9 +77,8 @@ int handle_list_end(ParseContext *context, Token tok, AST_Node *node)
 int handle_delimit(ParseContext *context, Token tok, AST_Node *node)
 {
     stack_push(&context->lastnode, NULL);
-
-    AST_Node *list;
-    stack_pop(&context->listnodes, &list);
+    AST_Node *list = stack_peek(&context->listnodes);
+    //stack_pop(&context->listnodes, &list);
     node = handle_node(context);
     dynamicarray_append(&list->list.node_array, &node);
 }
@@ -108,33 +107,30 @@ AST_Node *handle_node(ParseContext *context)
 
     //construct the ast node
     ParseType ptype;
-    for (size_t i = 0; i < context->ruleset_count; i++)
+    HashMap *hmap = &context->ruleset->parserules;
+    if (hashmap_lookup(hmap, tok.val, tok.len, &ptype) == HASHMAP_SUCCESS)
     {
-        HashMap hmap = context->rulesets[i].parserules;
-        if (hashmap_lookup(hmap, tok.val, tok.len, &ptype) == HASHMAP_SUCCESS)
+        switch (ptype)
         {
-            switch (ptype)
-            {
-            case PARSE_BINARY_OPERATOR:
-                return handle_infix_operator(context, tok, node);
-            case PARSE_PREFIX_OPERATOR:
-                return handle_prefix_operator(context, tok, node);
-            case PARSE_POSTFIX_OPERATOR:
-                return handle_postfix_operator(context, tok, node);
-            case PARSE_LIST_START_OPERATOR:
-                return handle_list_start(context, tok, node);
-            case PARSE_LIST_END_OPERATOR:
-                return handle_list_end(context, tok, node);
-            case PARSE_LIST_DELIMIT_OPERATOR:
-                return handle_delimit(context, tok, node);
-            default:
-                return handle_data_node(context, tok, node);
-            }
-        }
-        else // generic node
-        {
+        case PARSE_BINARY_OPERATOR:
+            return handle_infix_operator(context, tok, node);
+        case PARSE_PREFIX_OPERATOR:
+            return handle_prefix_operator(context, tok, node);
+        case PARSE_POSTFIX_OPERATOR:
+            return handle_postfix_operator(context, tok, node);
+        case PARSE_LIST_START_OPERATOR:
+            return handle_list_start(context, tok, node);
+        case PARSE_LIST_END_OPERATOR:
+            return handle_list_end(context, tok, node);
+        case PARSE_LIST_DELIMIT_OPERATOR:
+            return handle_delimit(context, tok, node);
+        default:
             return handle_data_node(context, tok, node);
         }
+    }
+    else // generic node
+    {
+        return handle_data_node(context, tok, node);
     }
 }
 
@@ -148,6 +144,11 @@ int parse(ParseContext *context, DynamicArray dynarr)
     }
 
     return i;
+}
+
+AST_Node *parse_tree(ParseContext *context, DynamicArray dynarr)
+{
+    return handle_node(context);
 }
 
 int flatten(AST_Node *node, DynamicArray dynarr, int loc)

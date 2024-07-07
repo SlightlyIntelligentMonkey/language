@@ -51,14 +51,14 @@ void dynamicarray_initialize(DynamicArray *dynarr, unsigned int element_size, un
 {
     dynarr->elsize = element_size;
     dynarr->used = 0;
-    dynamicarray_reserve(dynarr, initial_size);
+    dynarr->maxsize = initial_size;
+    dynarr->data = calloc(dynarr->maxsize, dynarr->elsize);
 }
 void dynamicarray_resize(DynamicArray *dynarr, unsigned int newsize)
 {
-    dynarr->used = newsize;
-    if(dynarr->used == dynarr->maxsize)
+    if(newsize > dynarr->maxsize)
     {
-        dynamicarray_reserve(dynarr, dynarr->maxsize*2);
+        dynamicarray_reserve(dynarr, newsize);
     }
 }
 void dynamicarray_reserve(DynamicArray *dynarr, unsigned int newsize)
@@ -66,10 +66,14 @@ void dynamicarray_reserve(DynamicArray *dynarr, unsigned int newsize)
     dynarr->data = realloc(dynarr->data, newsize*dynarr->elsize);
     dynarr->maxsize = newsize;
 }
+void dynamicarray_clear(DynamicArray *dynarr)
+{
+    dynarr->used = 0;
+}
 void *dynamicarray_append(DynamicArray *dynarr, void *el)
 {
     //resize the dynamic array if needed
-    if(dynarr->used == dynarr->maxsize)
+    if(dynarr->used >= dynarr->maxsize)
     {
         dynamicarray_resize(dynarr, dynarr->maxsize*2);
     }
@@ -80,16 +84,24 @@ void *dynamicarray_append(DynamicArray *dynarr, void *el)
 void *dynamicarray_new_element(DynamicArray *dynarr)
 {
     dynarr->used++;
-    if(dynarr->used == dynarr->maxsize)
+    if(dynarr->used >= dynarr->maxsize)
     {
         dynamicarray_resize(dynarr, dynarr->maxsize*2);
     }
     return dynarr->data + dynarr->used*dynarr->elsize;
 }
+void *dynamicarray_get_element(DynamicArray *dynarr, unsigned int element)
+{
+    if(element < dynarr->used)
+        return dynarr->data + element*dynarr->elsize;
+    else
+        return NULL;
+}
 void dynamicarray_free(DynamicArray *dynarr)
 {
     free(dynarr->data);
 }
+
 
 void stack_initialize(Stack *stack, unsigned int element_size, unsigned int max_depth)
 {
@@ -109,66 +121,102 @@ void stack_pop(Stack *stack, void *data)
     memcpy(data, stack->sp, stack->elsize);
     (uintptr_t)stack->sp -= stack->elsize;
 }
+void *stack_peek(Stack *stack)
+{
+    return stack->sp;
+}
 void stack_free(Stack *stack)
 {
     free(stack->data);
 }
 
-
-void hashmap_initialize(HashMap *hmap)
+void hashmap_initialize(HashMap *hmap, int initial_size, uint32_t elsize, float load_factor)
 {
-    hmap->pairs = calloc(hmap->initial_size, sizeof(HashmapPair));
+    hmap->elsize = elsize;
+    hmap->pairs = calloc(initial_size, sizeof(HashmapPair) + hmap->elsize);
     hmap->pair_count = 0;
-    hmap->pair_max = hmap->initial_size;
-    return;
+    hmap->pair_max = initial_size;
+    hmap->load_factor = load_factor;
+    hmap->hash = FNV_hash;
 }
 void hashmap_free(HashMap *hmap)
 {
-    return;
+    if(hmap->data != NULL)
+        free(hmap->data);
+    free(hmap->pairs);
 }
 
-uint32_t hashmap_findindex(HashMap *hmap, char *key, unsigned int keylen)
+//TODO: force this to be powers of two for faster "modulo" behavior
+uint32_t hashmap_findindex(void *data, void *key, uint32_t keylen, HashmapPair **pair)
 {
     uint32_t index = hmap->hash(key, keylen) % hmap->pair_max;
-
-    while(hmap->pairs[index].occupied == true && hmap->pairs[index].key != key)
+    *pair = (HashmapPair *)(data + (index * (sizeof(HashmapPair) + hmap->elsize)));
+    while(pair->occupied == true)
     {
+        if(pair->keylen == keylen && memcmp(pair->key, key, keylen))
+            break;
         index = (index + 1) % hmap->pair_max;
+        *pair = (HashmapPair *)(data + (index * (sizeof(HashmapPair) + hmap->elsize)));
     }
     return index;
 }
 
 void hashmap_resize(HashMap *hmap)
 {
-    HashmapPair *oldmap = hmap->pairs;
+    unsigned char *oldata = hmap->data;
 
     hmap->pair_max *= 2;
-    hmap->pairs = calloc(hmap->pair_max, sizeof(HashmapPair));
+    hmap->data = calloc(hmap->pair_max, sizeof(HashmapPair) + hmap->elsize);
 
+    //how annoying, to resize a hashmap we have to reinsert call of the pairs afterwards
+    //there is probably a better way to do this
     for (size_t i = 0; i < hmap->pair_max/2; i++)
     {
-        uint32_t index = 0;
+        HashmapPair *oldpair = hashmap_getpair(oldata, i);
+        if(oldpair->occupied == true)
+            hashmap_insert(hmap, oldpair->key, oldpair->keylen, (oldpair + sizeof(HashmapPair)));
     }
+    free(oldata);
 }
 
-HashmapReturn hashmap_insert(HashMap *hmap, char *key, unsigned int keylen, unsigned long long int val)
+//TODO: probably tell you if it found a duplicate and overwrote it
+HashmapReturn hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val)
 {
     if(hmap->pair_count > hmap->pair_max * hmap->load_factor)
         hashmap_resize(hmap);
+
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    if(pair->occupied != true)
+    {
+        pair->occupied = true;
+        pair->key = key;
+        pair->keylen = keylen;
+        hmap->pair_count += 1;
+    }
     
-    uint32_t index = hashmap_findindex(hmap, key, keylen);
-    hmap->pairs[index].occupied = true;
-    hmap->pairs[index].key = key;
-    hmap->pairs[index].val = key;
+    memcpy(pair + sizeof(HashmapPair), val, hmap->elsize);
+    return HASHMAP_SUCCESS;
 }
 
-HashmapReturn hashmap_delete(HashMap *hmap, char *key, unsigned int keylen)
+HashmapReturn hashmap_delete(HashMap *hmap, void *key, uint32_t keylen)
 {
-    ;
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    if(pair->occupied == false)
+        return HASHMAP_NOT_FOUND;
+    pair->occupied = false;
+    hmap->pair_count -= 1;
+    return HASHMAP_SUCCESS;
 }
 
-HashmapReturn hashmap_lookup(HashMap *hmap, char *key, unsigned int keylen, unsigned long long int *val)
+HashmapReturn hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val)
 {
-    uint32_t index = hashmap_findslot(hmap, key, keylen);
-    hmap->pairs[index];
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    if(pair->occupied == false)
+        return HASHMAP_NOT_FOUND;
+    if(val != NULL)
+        *val = pair + sizeof(HashmapPair);
+    return HASHMAP_SUCCESS;
 }
