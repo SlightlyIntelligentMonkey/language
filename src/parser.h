@@ -1,6 +1,6 @@
-#include "lexer.h"
-#include "pattern.h"
 #include "utility.h"
+#include "lexer.h"
+#include "sourcetree.h"
 
 typedef enum e_ParseType
 {
@@ -29,49 +29,7 @@ typedef struct ParseContext
     Stack lastnode;
 } ParseContext;
 
-//indices are used instead of pointers in case of memory copies
-struct AST_Node;
-struct InfixOperator_Node
-{
-    AST_Node *left;
-    AST_Node *right;
-};
-
-struct UnaryOperator_Node
-{
-    AST_Node *operand;
-};
-
-struct List_Node
-{
-    DynamicArray node_array;
-};
-
-enum AST_Node_Type
-{
-    AST_NODE_DATA,
-    AST_NODE_UNARY,
-    AST_NODE_BINARY,
-    AST_NODE_LIST
-};
-
-typedef struct AST_Node
-{
-    enum AST_Node_Type type;
-    Token tok;      //token used to construct the node
-    //uint64_t hash;
-    union
-    {
-        struct InfixOperator_Node inop;
-        struct UnaryOperator_Node unop;
-        struct List_Node list;
-    };
-} AST_Node;
-
 //returns array of root parse tree create from the parsecontext
 int parse(ParseContext *context, DynamicArray dynarr);
 
-AST_Node *parse_tree(ParseContext *context, DynamicArray dynarr);
-
-//flattens the ast tree starting from node given to an array
-int flatten(AST_Node *node, DynamicArray dynarr, int loc);
+SRC_Node *parse_ast_tree(ParseContext *context, DynamicArray dynarr);

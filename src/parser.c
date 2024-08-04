@@ -24,77 +24,84 @@ ParseRule create_parse_rule(char *identifier, enum ParseType type)
     return rule;
 }
 
-int handle_infix_operator(ParseContext *context, Token tok, AST_Node *node)
+int handle_infix_operator(ParseContext *context, Token tok, SRC_Node *node)
 {
-    node->type = AST_NODE_BINARY;
-    node->tok = tok;
+    node->type = SRC_OPERATOR;
+    node->data = (void*)tok;
+    dynamicarray_initialize(&node->children, sizeof(SRC_Node), 2);
+    SRC_Node *left = dynamicarray_get_element(&node->children, 0);
+    SRC_Node *right = dynamicarray_get_element(&node->children, 1);
 
-    stack_pop(&context->lastnode, node->inop.left);
-    node->inop.right = handle_node(context);
+    stack_pop(&context->lastnode, left);
+    right = handle_node(context);
     stack_push(&context->lastnode, node);
     return 0;
 }
 
-int handle_prefix_operator(ParseContext *context, Token tok, AST_Node *node)
+int handle_prefix_operator(ParseContext *context, Token tok, SRC_Node *node)
 {
-    node->type = AST_NODE_UNARY;
-    node->tok = tok;
+    node->type = SRC_OPERATOR;
+    node->data = (void*)tok;
+    dynamicarray_initialize(&node->children, sizeof(SRC_Node), 1);
+    SRC_Node *unop = dynamicarray_get_element(&node->children, 0);
 
-    node->unop.operand = handle_node(context);
+    unop = handle_node(context);
     stack_push(&context->lastnode, node);
     return 0;
 }
 
-int handle_postfix_operator(ParseContext *context, Token tok, AST_Node *node)
+int handle_postfix_operator(ParseContext *context, Token tok, SRC_Node *node)
 {
-    node->type = AST_NODE_UNARY;
-    node->tok = tok;
+    node->type = SRC_OPERATOR;
+    node->data = (void*)tok;
+    dynamicarray_initialize(&node->children, sizeof(SRC_Node), 1);
+    SRC_Node *unop = dynamicarray_get_element(&node->children, 0);
 
-    stack_pop(&context->lastnode, &node->unop.operand);
+    stack_pop(&context->lastnode, unop);
     stack_push(&context->lastnode, node);
     return 0;
 }
 
-int handle_list_start(ParseContext *context, Token tok, AST_Node *node)
+int handle_list_start(ParseContext *context, Token tok, SRC_Node *node)
 {
-    node->type = AST_NODE_LIST;
-    node->tok = tok;
-    dynamicarray_initialize(&node->list.node_array, sizeof(uintptr_t), 4);
+    node->type = SRC_LIST;
+    node->data = tok;
+    dynamicarray_initialize(&node->children, sizeof(uintptr_t), 2);
 
     stack_push(&context->listnodes, node);
     //stack_push(&context->lastnode, node);
     return 0;
 }
 
-int handle_list_end(ParseContext *context, Token tok, AST_Node *node)
+int handle_list_end(ParseContext *context, Token tok, SRC_Node *node)
 {
-    AST_Node *list;
+    SRC_Node *list;
     stack_pop(&context->listnodes, &list);
     stack_push(&context->lastnode, list);
     return 0;
 }
 
-int handle_delimit(ParseContext *context, Token tok, AST_Node *node)
+int handle_delimit(ParseContext *context, Token tok, SRC_Node *node)
 {
     stack_push(&context->lastnode, NULL);
-    AST_Node *list = stack_peek(&context->listnodes);
+    SRC_Node *list = stack_peek(&context->listnodes);
     //stack_pop(&context->listnodes, &list);
     node = handle_node(context);
-    dynamicarray_append(&list->list.node_array, &node);
+    dynamicarray_append(&list->children, &node);
 }
 
-int handle_data_node(ParseContext *context, Token tok, AST_Node *node)
+int handle_data_node(ParseContext *context, Token tok, SRC_Node *node)
 {
-    node->type = AST_NODE_DATA;
+    node->type = SRC_DATA;
     node->tok = tok;
     stack_push(&context->lastnode, node);
     return 0;
 }
 
-AST_Node *handle_node(ParseContext *context)
+SRC_Node *handle_node(ParseContext *context)
 {
-    AST_Node *node = malloc(sizeof(AST_Node));
-    memset(node, 0, sizeof(AST_Node));
+    SRC_Node *node = malloc(sizeof(SRC_Node));
+    memset(node, 0, sizeof(SRC_Node));
     //get next not comment token
     Token tok = eat_next_tok(&context->lexcontext);
     while(tok.type == TOK_COMMENT)
@@ -134,45 +141,7 @@ AST_Node *handle_node(ParseContext *context)
     }
 }
 
-int parse(ParseContext *context, DynamicArray dynarr)
-{
-    AST_Node *result = 0;
-    int i = 0;
-    for(; result != NULL; i++)
-    {
-        result = handle_node(context);
-    }
-
-    return i;
-}
-
-AST_Node *parse_tree(ParseContext *context, DynamicArray dynarr)
+SRC_Node *parse_ast_tree(ParseContext *context, DynamicArray dynarr)
 {
     return handle_node(context);
-}
-
-int flatten(AST_Node *node, DynamicArray dynarr, int loc)
-{
-    int len0 = 0;
-    int len1 = 0;
-    switch(node->type)
-    {
-    case AST_NODE_DATA:
-        memcpy(&dynarr.data[loc], node->tok.val, node->tok.len);
-        return node->tok.len;
-    case AST_NODE_UNARY:
-        len0 = flatten(node->unop.operand, dynarr, loc);
-        memcpy(&dynarr.data[loc+len0], node->tok.val, node->tok.len);
-        return len0 + node->tok.len;
-    case AST_NODE_BINARY:
-        len0 = flatten(node->inop.left, dynarr, loc);
-        memcpy(&dynarr.data[loc+len0], node->tok.val, node->tok.len);
-        len1 = flatten(node->inop.left, dynarr, loc);
-        return len0 + node->tok.len + len1;
-    case AST_NODE_LIST:
-        len0 = loc;
-        for (unsigned int i = 0; i < node->list.node_array.used; i++)
-            len0 += flatten(node->list.node_array.data[i], dynarr, len0);
-        return len0-loc;
-    }
 }

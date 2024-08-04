@@ -64,17 +64,16 @@ inline uint64_t FNV_hash(const char *input, uint64_t len)
 
 typedef uint64_t (*HashFunc)(const char *, uint64_t);
 //simple linear probing hashmap
-typedef enum HashmapReturn
+typedef enum HashmapResult
 {
     HASHMAP_SUCCESS,
     HASHMAP_DUPLICATE,
     HASHMAP_NOT_FOUND
-} HashmapReturn;
+} HashmapResult;
 //TODO: restructure this to have better cache locality maybe force key member to be static length
 typedef struct HashmapPair
 {
-    void *key;
-    uint32_t keylen;
+    uint64_t hash;
     bool occupied;
 } HashmapPair;
 typedef struct HashMap
@@ -90,7 +89,12 @@ typedef struct HashMap
 //0.75 is a good number for load_factor
 void hashmap_initialize(HashMap *hmap, int initial_size, uint32_t elsize, float load_factor);
 void hashmap_free(HashMap *hmap);
-HashmapReturn hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val);
-HashmapReturn hashmap_delete(HashMap *hmap, void *key, uint32_t keylen);
+//note this breaks references to the data contained
+void hashmap_resize(HashMap *hmap);
+HashmapResult hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val);
+HashmapResult hashmap_insert_prehashed(HashMap *hmap, uint64_t hash, void *val);
+HashmapResult hashmap_delete(HashMap *hmap, void *key, uint32_t keylen);
+HashmapResult hashmap_delete_prehashed(HashMap *hmap, uint64_t hash);
 //note you can pass null to val to just see if the object does exist
-HashmapReturn hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val);
+HashmapResult hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val);
+HashmapResult hashmap_lookup_prehashed(HashMap *hmap, uint64_t hash, void **val);

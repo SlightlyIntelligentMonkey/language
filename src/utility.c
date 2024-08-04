@@ -133,7 +133,7 @@ void stack_free(Stack *stack)
 void hashmap_initialize(HashMap *hmap, int initial_size, uint32_t elsize, float load_factor)
 {
     hmap->elsize = elsize;
-    hmap->pairs = calloc(initial_size, sizeof(HashmapPair) + hmap->elsize);
+    hmap->data = calloc(initial_size, sizeof(HashmapPair) + hmap->elsize);
     hmap->pair_count = 0;
     hmap->pair_max = initial_size;
     hmap->load_factor = load_factor;
@@ -143,20 +143,36 @@ void hashmap_free(HashMap *hmap)
 {
     if(hmap->data != NULL)
         free(hmap->data);
-    free(hmap->pairs);
 }
 
 //TODO: force this to be powers of two for faster "modulo" behavior
-uint32_t hashmap_findindex(void *data, void *key, uint32_t keylen, HashmapPair **pair)
+static inline uint32_t hashmap_findindex(HashmapPair **pair, uint64_t *rethash, HashMap *hmap, void *key, uint32_t keylen)
 {
-    uint32_t index = hmap->hash(key, keylen) % hmap->pair_max;
-    *pair = (HashmapPair *)(data + (index * (sizeof(HashmapPair) + hmap->elsize)));
-    while(pair->occupied == true)
+    uint64_t hash = hmap->hash(key, keylen);
+    uint32_t index = hash % hmap->pair_max;
+    *pair = (HashmapPair *)(hmap->data + (index * (sizeof(HashmapPair) + hmap->elsize)));
+    while((*pair)->occupied == true)
     {
-        if(pair->keylen == keylen && memcmp(pair->key, key, keylen))
+        if((*pair)->hash == hash)
             break;
         index = (index + 1) % hmap->pair_max;
-        *pair = (HashmapPair *)(data + (index * (sizeof(HashmapPair) + hmap->elsize)));
+        *pair = (HashmapPair *)(hmap->data + (index * (sizeof(HashmapPair) + hmap->elsize)));
+    }
+    if(rethash != NULL)
+        *rethash = hash;
+    return index;
+}
+
+static inline uint32_t hashmap_findindex_prehashed(HashmapPair **pair, HashMap *hmap, uint64_t hash)
+{
+    uint32_t index = hash % hmap->pair_max;
+    *pair = (HashmapPair *)(hmap->data + (index * (sizeof(HashmapPair) + hmap->elsize)));
+    while((*pair)->occupied == true)
+    {
+        if((*pair)->hash == hash)
+            break;
+        index = (index + 1) % hmap->pair_max;
+        *pair = (HashmapPair *)(hmap->data + (index * (sizeof(HashmapPair) + hmap->elsize)));
     }
     return index;
 }
@@ -172,26 +188,43 @@ void hashmap_resize(HashMap *hmap)
     //there is probably a better way to do this
     for (size_t i = 0; i < hmap->pair_max/2; i++)
     {
-        HashmapPair *oldpair = hashmap_getpair(oldata, i);
+        HashmapPair *oldpair = (HashmapPair *)(oldata + (i * (sizeof(HashmapPair) + hmap->elsize)));
         if(oldpair->occupied == true)
-            hashmap_insert(hmap, oldpair->key, oldpair->keylen, (oldpair + sizeof(HashmapPair)));
+            hashmap_insert_prehashed(hmap, oldpair->hash, (oldpair + sizeof(HashmapPair)));
     }
     free(oldata);
 }
 
 //TODO: probably tell you if it found a duplicate and overwrote it
-HashmapReturn hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val)
+HashmapResult hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *val)
 {
     if(hmap->pair_count > hmap->pair_max * hmap->load_factor)
         hashmap_resize(hmap);
 
     HashmapPair *pair;
-    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    uint64_t hash;
+    uint32_t index = hashmap_findindex(&pair, &hash, hmap, key, keylen);
     if(pair->occupied != true)
     {
         pair->occupied = true;
-        pair->key = key;
-        pair->keylen = keylen;
+        pair->hash = hash;
+        hmap->pair_count += 1;
+    }
+    
+    memcpy(pair + sizeof(HashmapPair), val, hmap->elsize);
+    return HASHMAP_SUCCESS;
+}
+HashmapResult hashmap_insert_prehashed(HashMap *hmap, uint64_t hash, void *val)
+{
+    if(hmap->pair_count > hmap->pair_max * hmap->load_factor)
+        hashmap_resize(hmap);
+
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex_prehashed(&pair, hmap, hash);
+    if(pair->occupied != true)
+    {
+        pair->occupied = true;
+        pair->hash = 
         hmap->pair_count += 1;
     }
     
@@ -199,10 +232,10 @@ HashmapReturn hashmap_insert(HashMap *hmap, void *key, uint32_t keylen, void *va
     return HASHMAP_SUCCESS;
 }
 
-HashmapReturn hashmap_delete(HashMap *hmap, void *key, uint32_t keylen)
+HashmapResult hashmap_delete(HashMap *hmap, void *key, uint32_t keylen)
 {
     HashmapPair *pair;
-    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    uint32_t index = hashmap_findindex(&pair, NULL, hmap, key, keylen);
     if(pair->occupied == false)
         return HASHMAP_NOT_FOUND;
     pair->occupied = false;
@@ -210,10 +243,31 @@ HashmapReturn hashmap_delete(HashMap *hmap, void *key, uint32_t keylen)
     return HASHMAP_SUCCESS;
 }
 
-HashmapReturn hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val)
+HashmapResult hashmap_delete_prehashed(HashMap *hmap, uint64_t hash)
 {
     HashmapPair *pair;
-    uint32_t index = hashmap_findindex(hmap->data, key, keylen, &pair);
+    uint32_t index = hashmap_findindex_prehashed(&pair, hmap, hash);
+    if(pair->occupied == false)
+        return HASHMAP_NOT_FOUND;
+    pair->occupied = false;
+    hmap->pair_count -= 1;
+    return HASHMAP_SUCCESS;
+}
+
+HashmapResult hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val)
+{
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex(&pair, NULL, hmap, key, keylen);
+    if(pair->occupied == false)
+        return HASHMAP_NOT_FOUND;
+    if(val != NULL)
+        *val = pair + sizeof(HashmapPair);
+    return HASHMAP_SUCCESS;
+}
+HashmapResult hashmap_lookup_prehashed(HashMap *hmap, uint64_t hash, void **val)
+{
+    HashmapPair *pair;
+    uint32_t index = hashmap_findindex_prehashed(&pair, hmap, hash);
     if(pair->occupied == false)
         return HASHMAP_NOT_FOUND;
     if(val != NULL)
