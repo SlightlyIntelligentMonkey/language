@@ -29,10 +29,14 @@ void pile(char *data, int len, Ruleset *ruleset)
     memset(&pcontext, 0, sizeof(ParseContext));
     pcontext.lexcontext = &lcontext;
     pcontext.ruleset = ruleset;
-    stack_initialize(&pcontext.listnodes, sizeof(AST_Node*), 100);
-    stack_initialize(&pcontext.lastnode, sizeof(AST_Node*), 100);
+    stack_initialize(&pcontext.listnodes, sizeof(SRC_Node*), 1000);
+    stack_initialize(&pcontext.lastnode, sizeof(SRC_Node*), 1000);
 
-    //
+    for (SRC_Node *node = parse(&pcontext); node != NULL; node = parse(&pcontext))
+    {
+        //parse the semantics....
+        
+    }
 }
 
 void handle_option(const char *form1, const char *form2, char *arg)

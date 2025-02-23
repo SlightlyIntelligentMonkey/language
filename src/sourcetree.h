@@ -5,6 +5,37 @@
 #include "parser.h"
 #include "utility.h"
 
+typedef struct Symbol
+{
+    char *name;
+    uint64_t hash;
+    union
+    {
+        uint64_t data;
+        void *data_ptr;
+    };
+    uint64_t metadata;
+    Symbol *type;
+} Symbol;
+
+void symboltable_initialize();
+
+Symbol *symboltable_get_symbol(char *symbol);
+
+typedef struct SRC_Node
+{
+    //void *material;      //what was used to construct the node
+    Symbol *type;
+    void *data;
+    int data_size;
+    DynamicArray children;
+    State *state;
+    SRC_Node *next;
+    SRC_Node *prev;
+} SRC_Node;
+
+typedef SRC_Node *(*Transform)(SRC_Node *node);
+
 typedef struct Ruleset
 {
     //ParseRule parserules;
@@ -14,26 +45,7 @@ typedef struct Ruleset
     DynamicArray transforms;
 } Ruleset;
 
-typedef enum NodeType
-{
-    SRC_DATA,
-    SRC_LIST,
-    SRC_OPERATOR
-} NodeType;
-typedef struct SRC_Node
-{
-    bool fromtoken;
-    //void *material;      //what was used to construct the node
-    NodeType type;
-    void *data;
-    DynamicArray children;
-} SRC_Node;
-
-typedef SRC_Node *(*Transform)(SRC_Node *node);
-
 Ruleset *ruleset_create();
-void ruleset_add_parserule(Ruleset *ruleset, ParseRule *rule);
-void ruleset_add_pattern(Ruleset *ruleset, Transform *transform);
-
-void symboltable_initialize();
-void symboltable_assign(char *symbol, uint64_t symbol_len, void *value);
+Ruleset *ruleset_create_with(Rule *rules);
+void ruleset_add(Ruleset *ruleset, Rule *rule);
+Ruleset *combine_rulesets(Ruleset *a, Ruleset *b);

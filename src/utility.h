@@ -8,16 +8,20 @@ typedef struct Buffer
     size_t size;
 } Buffer;
 
-typedef struct PoolSection
+typedef struct MemoryPool
 {
-    void *memory;
-    unsigned int size;
-    uint32_t id;
-} PoolSection;
-
-void mpool_init(size_t pool_size);
-PoolSection mpool_alloc(unsigned int size);
-void mpool_free(PoolSection *psect);
+    unsigned char *block;
+    bool *blockused;
+    int *block_alloc_length;
+    unsigned char *temp;
+    size_t size;
+    int block_size;
+} MemoryPool;
+void memorypool_initialize(MemoryPool *mpool, int initial_size, int block_size);
+void memorypool_clear(MemoryPool *mpool);
+void *memorypool_allocate_block(MemoryPool *mpool, int count);
+void memorypool_free_block(MemoryPool *mpool, void *mem);
+void memorypool_free(MemoryPool *mpool);
 
 typedef struct DynamicArray
 {
@@ -26,12 +30,17 @@ typedef struct DynamicArray
     uintptr_t maxsize;
     uintptr_t elsize;
 } DynamicArray;
+
 void dynamicarray_initialize(DynamicArray *dynarr, unsigned int element_size, unsigned int initial_size);
 void dynamicarray_resize(DynamicArray *dynarr, unsigned int newsize);
 void dynamicarray_reserve(DynamicArray *dynarr, unsigned int newsize);
+void dynamicarray_clear(DynamicArray *dynarr);
 void *dynamicarray_append(DynamicArray *dynarr, void *el);
-void *dynamicarray_get_element(DynamicArray *dynarr, unsigned int element);
 void *dynamicarray_new_element(DynamicArray *dynarr);
+void *dynamicarray_new_element_array(DynamicArray *dynarr, unsigned int num);
+void *dynamicarray_get_element(DynamicArray *dynarr, unsigned int element);
+void dynamicarray_insert(DynamicArray *dynarr, int index, void *data);
+void dynamicarray_delete(DynamicArray *dynarr, int index);
 void dynamicarray_free(DynamicArray *dynarr);
 
 typedef struct Stack
@@ -98,3 +107,6 @@ HashmapResult hashmap_delete_prehashed(HashMap *hmap, uint64_t hash);
 //note you can pass null to val to just see if the object does exist
 HashmapResult hashmap_lookup(HashMap *hmap, void *key, uint32_t keylen, void **val);
 HashmapResult hashmap_lookup_prehashed(HashMap *hmap, uint64_t hash, void **val);
+//treats the data stored as a pointer and writes it directly to the pointer provided
+HashmapResult hashmap_lookup_copy(HashMap *hmap, void *key, uint32_t keylen, void **val);
+void hashmap_map(HashMap *hmap, void *func);

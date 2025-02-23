@@ -17,24 +17,20 @@ Ruleset *ruleset_create()
 {
     Ruleset *ruleset = malloc(sizeof(Ruleset));
     hashmap_initialize(&ruleset->parserules, 16, sizeof(ParseRule), 0.75);
+    dynamicarray_initialize(&ruleset->transforms, sizeof(void *), 16);
 }
-void ruleset_add_parserule(Ruleset *ruleset, ParseRule *rule)
-{
-    hashmap_insert(&ruleset->parserules, rule->identifier, strlen(rule->identifier), rule);
-}
-void ruleset_add_pattern(Ruleset *ruleset, Transform *transform)
+Ruleset *ruleset_create_with(Rule *rules)
 {
     //
 }
-
-typedef struct Symbol
+void ruleset_add(Ruleset *ruleset, Rule *rule)
 {
-    char *str;
-    uint64_t hash;
-    uint64_t data;
-    uint64_t metadata;
-    Symbol *type;
-} Symbol;
+    //
+}
+Ruleset *combine_rulesets(Ruleset *a, Ruleset *b)
+{
+    //
+}
 
 HashMap symbol_table;
 DynamicArray symbol_data;
@@ -45,7 +41,26 @@ void symboltable_initialize()
     dynamicarray_initialize(&symbol_data, sizeof(int *), 8);
 }
 
-void symboltable_assign(char *symbol, uint64_t symbol_len, void *value)
+Symbol *symboltable_create_symbol(char *symbol)
 {
-    hashmap_lookup(&symbol_table, symbol, symbol_len, NULL);
+    Symbol sym;
+    sym.name = symbol;
+    sym.hash = 0;   //this needs to be set
+    sym.data = 0;
+    sym.metadata = 0;
+    sym.type = NULL;
+    hashmap_insert(&symbol_table, symbol, strlen(symbol), &sym);
+}
+
+Symbol *symboltable_get_symbol(char *symbol)
+{
+    Symbol *sym;
+    if(hashmap_lookup(&symbol_table, symbol, strlen(symbol), &sym) == HASHMAP_NOT_FOUND)
+        return symboltable_create_symbol(symbol);
+    return sym;
+}
+
+void construct_src_tree(Ruleset *ruleset, char *raw)
+{
+    //
 }
